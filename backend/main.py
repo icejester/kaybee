@@ -1,9 +1,13 @@
 import os
-import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+
+from providers.registry import list_provider_types, get_provider_class
+from providers.ollama_provider import OllamaProvider
+from providers.anthropic_provider import AnthropicProvider
+import storage
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 MODEL = os.getenv("MODEL", "qwen2.5-coder:7b")
@@ -16,6 +20,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def startup():
+    storage.seed_default_entry(OLLAMA_BASE_URL, MODEL)
 
 
 VERBOSITY_PREFIXES = {
@@ -32,14 +41,73 @@ VERBOSITY_PREFIXES = {
 }
 
 
+# --- Request / Response models ---
+
 class AskRequest(BaseModel):
     question: str
+    entry_id: str
     mode: str = "concise"
 
 
+class AddEntryRequest(BaseModel):
+    label: str
+    provider_type: str
+    config: dict = {}
+    key_fields: dict = {}
+
+
+# --- Endpoints ---
+
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model": MODEL}
+    entries = storage.list_entries()
+    active = entries[0] if entries else None
+    label = active["label"] if active else "no model configured"
+    return {"status": "ok", "model": label}
+
+
+@app.get("/providers")
+async def providers():
+    return list_provider_types()
+
+
+@app.get("/entries")
+async def entries():
+    return storage.list_entries()
+
+
+@app.post("/entries")
+async def add_entry(req: AddEntryRequest):
+    # Validate provider type exists
+    get_provider_class(req.provider_type)  # raises ValueError if unknown
+
+    # Separate sensitive key fields from safe config fields
+    provider_cls = get_provider_class(req.provider_type)
+    sensitive = {f for f in provider_cls.required_fields() if f in {"api_key", "secret", "token"}}
+
+    safe_config = {k: v for k, v in req.config.items() if k not in sensitive}
+    key_fields = {k: v for k, v in req.config.items() if k in sensitive}
+    # Also accept explicit key_fields from the request body
+    key_fields.update(req.key_fields)
+
+    try:
+        entry = storage.add_entry(
+            label=req.label,
+            provider_type=req.provider_type,
+            config=safe_config,
+            key_fields=key_fields or None,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return entry
+
+
+@app.delete("/entries/{entry_id}")
+async def delete_entry(entry_id: str):
+    removed = storage.remove_entry(entry_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"ok": True}
 
 
 @app.post("/ask")
@@ -47,25 +115,21 @@ async def ask(req: AskRequest):
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
+    raw = storage.get_raw_entry(req.entry_id)
+    if raw is None:
+        raise HTTPException(status_code=404, detail="Entry not found")
+
     prefix = VERBOSITY_PREFIXES.get(req.mode, VERBOSITY_PREFIXES["concise"])
     prompt = prefix + req.question.strip()
 
-    payload = {
-        "model": MODEL,
-        "prompt": prompt,
-        "stream": True,
-    }
+    try:
+        provider_cls = get_provider_class(raw["provider_type"])
+        provider = provider_cls(raw["config"])
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-    async def stream_response():
-        async with httpx.AsyncClient(timeout=120) as client:
-            try:
-                async with client.stream("POST", f"{OLLAMA_BASE_URL}/api/generate", json=payload) as resp:
-                    resp.raise_for_status()
-                    async for chunk in resp.aiter_text():
-                        yield chunk
-            except httpx.ConnectError:
-                yield '{"error": "Cannot connect to Ollama. Is it running?"}'
-            except httpx.HTTPStatusError as e:
-                yield f'{{"error": "Ollama returned {e.response.status_code}"}}'
+    async def stream():
+        async for chunk in provider.ask_stream(prompt):
+            yield chunk
 
-    return StreamingResponse(stream_response(), media_type="application/x-ndjson")
+    return StreamingResponse(stream(), media_type="application/x-ndjson")

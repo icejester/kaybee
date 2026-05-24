@@ -12,6 +12,9 @@ services:
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
       - MODEL=qwen2.5-coder:7b
+      - DATA_DIR=/app/data
+    volumes:
+      - kaybee_data:/app/data
     depends_on:
       - ollama
     restart: unless-stopped
@@ -27,3 +30,4 @@ services:
 
 volumes:
   ollama_data:
+  kaybee_data:
