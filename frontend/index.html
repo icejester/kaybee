@@ -54,12 +54,46 @@
       padding: 2px 8px;
     }
 
+    .verbosity-toggle {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-left: auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .verbosity-toggle button {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      padding: 4px 10px;
+      transition: background 0.15s, color 0.15s;
+      text-transform: uppercase;
+    }
+
+    .verbosity-toggle button.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .verbosity-toggle button:not(.active):hover {
+      background: var(--border);
+      color: var(--text);
+    }
+
     #status-dot {
       width: 8px;
       height: 8px;
       border-radius: 50%;
       background: var(--text-dim);
-      margin-left: auto;
       transition: background 0.3s;
     }
     #status-dot.online { background: var(--green); }
@@ -222,6 +256,10 @@
 <header>
   <h1>kaybee</h1>
   <span class="model-badge" id="model-label">loading...</span>
+  <div class="verbosity-toggle">
+    <button id="btn-concise" class="active" title="Answer only, no explanation">concise</button>
+    <button id="btn-verbose" title="Answer with explanation">verbose</button>
+  </div>
   <span id="status-dot" title="Ollama status"></span>
 </header>
 
@@ -248,6 +286,21 @@
   const sendBtn = document.getElementById('send-btn');
   const modelLabel = document.getElementById('model-label');
   const statusDot = document.getElementById('status-dot');
+  const btnConcise = document.getElementById('btn-concise');
+  const btnVerbose = document.getElementById('btn-verbose');
+
+  let verbosityMode = localStorage.getItem('verbosity') || 'concise';
+
+  function setVerbosity(mode) {
+    verbosityMode = mode;
+    localStorage.setItem('verbosity', mode);
+    btnConcise.classList.toggle('active', mode === 'concise');
+    btnVerbose.classList.toggle('active', mode === 'verbose');
+  }
+
+  setVerbosity(verbosityMode);
+  btnConcise.addEventListener('click', () => setVerbosity('concise'));
+  btnVerbose.addEventListener('click', () => setVerbosity('verbose'));
 
   // auto-resize textarea
   questionEl.addEventListener('input', () => {
@@ -336,7 +389,7 @@
       const res = await fetch(`${API}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question, mode: verbosityMode }),
       });
 
       if (!res.ok) {

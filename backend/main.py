@@ -18,8 +18,23 @@ app.add_middleware(
 )
 
 
+VERBOSITY_PREFIXES = {
+    "concise": (
+        "Respond with only what was asked for — the command, code, or answer. "
+        "No explanation, no preamble, no commentary. Be terse and exact."
+        "\n\n"
+    ),
+    "verbose": (
+        "Provide the answer (command, code, or solution) followed by a clear explanation "
+        "of how it works and why."
+        "\n\n"
+    ),
+}
+
+
 class AskRequest(BaseModel):
     question: str
+    mode: str = "concise"
 
 
 @app.get("/health")
@@ -32,9 +47,12 @@ async def ask(req: AskRequest):
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
+    prefix = VERBOSITY_PREFIXES.get(req.mode, VERBOSITY_PREFIXES["concise"])
+    prompt = prefix + req.question.strip()
+
     payload = {
         "model": MODEL,
-        "prompt": req.question.strip(),
+        "prompt": prompt,
         "stream": True,
     }
 
