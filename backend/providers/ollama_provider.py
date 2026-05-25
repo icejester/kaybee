@@ -1,3 +1,4 @@
+import json
 import httpx
 from .base import BaseProvider
 
@@ -23,15 +24,27 @@ class OllamaProvider(BaseProvider):
             return resp.json()["response"]
 
     async def ask_stream(self, question: str):
-        """Yield raw NDJSON chunks from Ollama for streaming passthrough."""
-        payload = {"model": self.model, "prompt": question, "stream": True}
+        async for chunk in self.ask_stream_messages([{"role": "user", "content": question}]):
+            yield chunk
+
+    async def ask_stream_messages(self, messages: list[dict]):
+        """Yield NDJSON chunks from Ollama /api/chat for multi-turn streaming."""
+        payload = {"model": self.model, "messages": messages, "stream": True}
         async with httpx.AsyncClient(timeout=120) as client:
             try:
-                async with client.stream("POST", f"{self.base_url}/api/generate", json=payload) as resp:
+                async with client.stream("POST", f"{self.base_url}/api/chat", json=payload) as resp:
                     resp.raise_for_status()
-                    async for chunk in resp.aiter_text():
-                        yield chunk
+                    async for line in resp.aiter_lines():
+                        if not line.strip():
+                            continue
+                        try:
+                            data = json.loads(line)
+                            content = data.get("message", {}).get("content", "")
+                            done = data.get("done", False)
+                            yield json.dumps({"response": content, "done": done}) + "\n"
+                        except json.JSONDecodeError:
+                            pass
             except httpx.ConnectError:
-                yield '{"error": "Cannot connect to Ollama. Is it running?"}'
+                yield '{"error": "Cannot connect to Ollama. Is it running?"}\n'
             except httpx.HTTPStatusError as e:
-                yield f'{{"error": "Ollama returned {e.response.status_code}"}}'
+                yield f'{{"error": "Ollama returned {e.response.status_code}"}}\n'

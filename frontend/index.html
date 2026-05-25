@@ -268,6 +268,21 @@
     #send-btn:hover { background: var(--accent-dim); }
     #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+    #new-session-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 0 14px;
+      white-space: nowrap;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    #new-session-btn:hover { border-color: var(--accent); color: var(--text); }
+
     .hint {
       text-align: center;
       font-size: 11px;
@@ -447,8 +462,9 @@
 
 <footer>
   <div class="input-row">
-    <textarea id="question" placeholder='how do I traverse a CSV file in bash again?' rows="1"></textarea>
+    <textarea id="question" rows="1"></textarea>
     <button id="send-btn">Ask</button>
+    <button id="new-session-btn" title="Clear history and start a new conversation">New Session</button>
   </div>
   <p class="hint">Enter to send &nbsp;·&nbsp; Shift+Enter for newline</p>
 </footer>
@@ -495,6 +511,7 @@
   const emptyState = document.getElementById('empty-state');
   const questionEl = document.getElementById('question');
   const sendBtn = document.getElementById('send-btn');
+  const newSessionBtn = document.getElementById('new-session-btn');
   const statusDot = document.getElementById('status-dot');
   const btnConcise = document.getElementById('btn-concise');
   const btnVerbose = document.getElementById('btn-verbose');
@@ -511,6 +528,115 @@
   let verbosityMode = localStorage.getItem('verbosity') || 'concise';
   let entries = [];
   let providers = [];
+
+  // ── Session ID ─────────────────────────────────────────────────────────────
+  // Stored in sessionStorage so it clears when the tab is closed.
+  let sessionId = sessionStorage.getItem('kb_session_id') || null;
+
+  // ── Placeholder rotation ───────────────────────────────────────────────────
+  const PLACEHOLDERS = [
+  // signals & process control
+  "Was SIGTERM 15 or 9?",
+  "Which kill signal can't be caught?",
+  "What's the difference between SIGTERM and SIGKILL?",
+  "How do I send a signal to a process group?",
+  "What does SIGHUP actually do to a daemon?",
+  "How do I trap a signal in a shell script?",
+  "What's SIGPIPE and when does it fire?",
+
+  // permissions & ownership
+  "Is it -rf or -fr?",
+  "Was that chmod +t or +s?",
+  "SGID or SUID — I always mix those up.",
+  "What's the sticky bit octal again?",
+  "Was it 1755 or 1777?",
+  "umask. What does umask do again.",
+  "How do I find all SUID binaries on the system?",
+  "What does chmod 4755 actually set?",
+  "How do I change ownership recursively without following symlinks?",
+  "What's the difference between ACLs and standard unix permissions?",
+
+  // file descriptors & redirection
+  "What does 2>&1 actually mean?",
+  "How do I redirect stderr to a file and stdout to another?",
+  "What's the difference between > and >>?",
+  "How do I discard stderr but keep stdout?",
+  "What does >&- do?",
+  "How do I duplicate a file descriptor in bash?",
+  "What's /proc/self/fd again?",
+
+  // devices & special files
+  "What's the diff between /dev/null and /dev/zero?",
+  "What does dd if=/dev/zero do again?",
+  "How do I zero a disk without dd?",
+  "What's /dev/urandom vs /dev/random?",
+  "How do I create a block device with dd?",
+  "What are major and minor device numbers?",
+  "How do I make a named pipe again?",
+
+  // filesystems & disk
+  "How do I hex dump a binary again?",
+  "What's the difference between hard and soft links?",
+  "How do I find open file handles for a process?",
+  "How do I list open file handles?",
+  "How do I check inode usage vs block usage?",
+  "What's the difference between fsck and e2fsck?",
+  "How do I mount an image file as a loopback?",
+  "How do I find which process has a file open?",
+  "What does lsof -i do again?",
+  "How do I check filesystem type without mounting?",
+  "What's the difference between sync and fsync?",
+
+  // memory & kernel
+  "How do I read /proc/meminfo again?",
+  "What does /proc/sys/vm/swappiness do?",
+  "How do I read a core dump?",
+  "What's the difference between VSZ and RSS?",
+  "How do I check kernel ring buffer without dmesg?",
+  "What does vm.overcommit_memory do?",
+  "How do I inspect a running kernel module?",
+  "What's in /proc/interrupts?",
+
+  // networking
+  "What's the flag to show numeric ports in netstat?",
+  "How do I check which process owns a port?",
+  "What does ss -tulpn do again?",
+  "How do I trace a route with ICMP vs UDP?",
+  "What's the difference between a hub and a switch, at the packet level?",
+  "How do I set a static ARP entry?",
+  "What does ip route show table all do?",
+  "How do I capture traffic on a specific port with tcpdump?",
+
+  // debugging & tracing
+  "Was it strace or ltrace?",
+  "How do I attach strace to a running process?",
+  "What flag shows syscall timing in strace?",
+  "How do I use gdb to get a backtrace from a core?",
+  "What does perf stat actually measure?",
+  "How do I profile a process without stopping it?",
+  "What's the difference between valgrind and asan?",
+
+  // shell & scripting
+  "What's the flag to follow symlinks in find?",
+  "How do I detach from a screen session?",
+  "What's the difference between $@ and $*?",
+  "How do I get the exit code of the last command in a pipe?",
+  "What does set -e actually do in a script?",
+  "How do I do arithmetic in bash without bc?",
+  "What's the syntax for a here-doc again?",
+  "How do I iterate over lines in a file without a subshell?",
+  "What does $! hold again?",
+  "How do I background a process and keep it running after logout?",
+
+  // archives & data
+  "Was it tar -xzvf or -xjvf for bzip?",
+  "How do I list contents of a tar without extracting?",
+  "What's the rsync flag to delete files not in source?",
+  "How do I diff two directories recursively?",
+  "What does od -c do again?",
+  "How do I base64 decode on the command line?",
+];
+  questionEl.placeholder = PLACEHOLDERS[Math.floor(Math.random() * PLACEHOLDERS.length)];
 
   // ── Verbosity ──────────────────────────────────────────────────────────────
   function setVerbosity(mode) {
@@ -795,8 +921,15 @@
       const res = await fetch(`${API}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, mode: verbosityMode, entry_id }),
+        body: JSON.stringify({ question, mode: verbosityMode, entry_id, session_id: sessionId }),
       });
+
+      // Capture session ID from response header and persist it
+      const newSid = res.headers.get('X-Session-Id');
+      if (newSid) {
+        sessionId = newSid;
+        sessionStorage.setItem('kb_session_id', sessionId);
+      }
 
       if (!res.ok) {
         streaming.done();
@@ -846,6 +979,21 @@
       questionEl.focus();
     }
   }
+
+  // ── New Session ────────────────────────────────────────────────────────────
+  newSessionBtn.addEventListener('click', async () => {
+    if (sessionId) {
+      await fetch(`${API}/session/${sessionId}`, { method: 'DELETE' }).catch(() => {});
+    }
+    sessionStorage.removeItem('kb_session_id');
+    sessionId = null;
+    // Clear the chat log and show empty state
+    while (chat.firstChild) chat.removeChild(chat.firstChild);
+    chat.appendChild(emptyState);
+    emptyState.style.display = '';
+    questionEl.placeholder = PLACEHOLDERS[Math.floor(Math.random() * PLACEHOLDERS.length)];
+    questionEl.focus();
+  });
 
   // ── Init ───────────────────────────────────────────────────────────────────
   loadEntries();
