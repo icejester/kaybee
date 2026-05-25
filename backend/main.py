@@ -1,4 +1,7 @@
+import json
 import os
+import uuid
+from collections import defaultdict
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -12,6 +15,10 @@ import storage
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 MODEL = os.getenv("MODEL", "qwen2.5-coder:7b")
 
+# In-memory session store: { session_id: [{"role": ..., "content": ...}, ...] }
+sessions: dict[str, list[dict]] = defaultdict(list)
+MAX_HISTORY_MESSAGES = 40
+
 app = FastAPI(title="Kaybee")
 
 app.add_middleware(
@@ -19,6 +26,7 @@ app.add_middleware(
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Session-Id"],
 )
 
 
@@ -47,6 +55,7 @@ class AskRequest(BaseModel):
     question: str
     entry_id: str
     mode: str = "concise"
+    session_id: str | None = None
 
 
 class AddEntryRequest(BaseModel):
@@ -119,17 +128,46 @@ async def ask(req: AskRequest):
     if raw is None:
         raise HTTPException(status_code=404, detail="Entry not found")
 
-    prefix = VERBOSITY_PREFIXES.get(req.mode, VERBOSITY_PREFIXES["concise"])
-    prompt = prefix + req.question.strip()
-
     try:
         provider_cls = get_provider_class(raw["provider_type"])
         provider = provider_cls(raw["config"])
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    async def stream():
-        async for chunk in provider.ask_stream(prompt):
-            yield chunk
+    sid = req.session_id or str(uuid.uuid4())
 
-    return StreamingResponse(stream(), media_type="application/x-ndjson")
+    sessions[sid].append({"role": "user", "content": req.question.strip()})
+    if len(sessions[sid]) > MAX_HISTORY_MESSAGES:
+        sessions[sid] = sessions[sid][-MAX_HISTORY_MESSAGES:]
+
+    verbosity_instruction = VERBOSITY_PREFIXES.get(req.mode, VERBOSITY_PREFIXES["concise"])
+    messages = [{"role": "system", "content": verbosity_instruction}] + sessions[sid]
+
+    collected: list[str] = []
+
+    async def stream():
+        async for chunk in provider.ask_stream_messages(messages):
+            yield chunk
+            # Accumulate response text to store in history after streaming completes
+            try:
+                data = json.loads(chunk)
+                if data.get("response"):
+                    collected.append(data["response"])
+            except Exception:
+                pass
+        sessions[sid].append({"role": "assistant", "content": "".join(collected)})
+
+    response = StreamingResponse(stream(), media_type="application/x-ndjson")
+    response.headers["X-Session-Id"] = sid
+    return response
+
+
+@app.delete("/session/{session_id}")
+async def clear_session(session_id: str):
+    sessions.pop(session_id, None)
+    return {"cleared": True}
+
+
+@app.get("/session/{session_id}/history")
+async def get_history(session_id: str):
+    return {"messages": sessions.get(session_id, [])}
