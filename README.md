@@ -1,6 +1,6 @@
 # Kaybee 📖
 
-> A local, private knowledge base powered by your own AI. No cloud. No subscription. No data leaving your machine.
+A local, private knowledge base powered by your own AI. No cloud. No subscription. No data leaving your machine.
 
 ---
 
@@ -25,7 +25,7 @@ Every major IDE is racing to bundle AI assistance — but they're all cloud-base
 - **Local** — runs on your hardware, period
 - **Private** — zero telemetry, zero phone home
 - **Free** — no API keys, no usage limits, no credit card
-- **Fast** — no round trips to a data center
+- **Fast...ish?** — no round trips to a data center... but also no data center.
 
 ---
 
@@ -99,20 +99,9 @@ Your questions are yours. Your answers are yours. Your box is yours.
 
 ## Roadmap
 
-- [ ] Conversation history
 - [ ] Context-aware file input (paste a file, ask about it)
-- [ ] Model switcher in UI
-- [ ] Keyboard-first interface
-- [ ] CLI wrapper (`kb "how do I..."`)
+- 'Teach-Me' mode
 
 ---
 
-## Contributing
-
-PRs welcome. Keep it simple. Keep it local.
-
----
-
-## License
-
-AGPL v3 — free to use, modify, and distribute. Any derivative work or service built on Kaybee must also be open source under the same license.
+Copyright (c) 2026 Jared Mallas. All rights reserved..
