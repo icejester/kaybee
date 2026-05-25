@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Kaybee</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -45,14 +46,20 @@
       color: var(--accent);
     }
 
-    header .model-badge {
-      font-size: 11px;
-      color: var(--text-dim);
+    /* Entry selector dropdown */
+    #entry-select {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 4px;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 11px;
       padding: 2px 8px;
+      outline: none;
+      max-width: 180px;
     }
+    #entry-select:focus { border-color: var(--accent); }
 
     .verbosity-toggle {
       display: flex;
@@ -89,6 +96,19 @@
       color: var(--text);
     }
 
+    /* Settings gear button */
+    #settings-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 4px 8px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    #settings-btn:hover { color: var(--text); border-color: var(--accent); }
+
     #status-dot {
       width: 8px;
       height: 8px;
@@ -121,9 +141,7 @@
       font-size: 20px;
       color: var(--text-dim);
     }
-    .empty-state p {
-      font-size: 13px;
-    }
+    .empty-state p { font-size: 13px; }
 
     .message {
       display: flex;
@@ -149,16 +167,26 @@
       border-radius: 8px;
       padding: 14px 18px;
       line-height: 1.65;
-      white-space: pre-wrap;
       word-break: break-word;
     }
 
     .message.user .body {
       background: var(--code-bg);
       border-color: var(--accent-dim);
+      white-space: pre-wrap;
     }
 
-    /* code blocks inside responses */
+    /* Markdown prose styles for assistant messages */
+    .message.assistant .body p { margin: 0 0 10px; }
+    .message.assistant .body p:last-child { margin-bottom: 0; }
+    .message.assistant .body ul,
+    .message.assistant .body ol { margin: 0 0 10px 20px; }
+    .message.assistant .body li { margin-bottom: 4px; }
+    .message.assistant .body h1,
+    .message.assistant .body h2,
+    .message.assistant .body h3 { margin: 14px 0 6px; font-size: 14px; }
+    .message.assistant .body strong { color: var(--text); }
+
     .message .body code {
       background: var(--code-bg);
       border: 1px solid var(--border);
@@ -249,18 +277,165 @@
       margin-left: auto;
       margin-right: auto;
     }
+
+    /* ── Settings modal ── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal-overlay.hidden { display: none; }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px;
+      width: 520px;
+      max-width: 95vw;
+      max-height: 85vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .modal h2 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 0.05em;
+    }
+
+    .modal-section { display: flex; flex-direction: column; gap: 12px; }
+    .modal-section h3 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+    }
+
+    /* Entry list */
+    .entry-list { display: flex; flex-direction: column; gap: 8px; }
+
+    .entry-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+    }
+
+    .entry-item .entry-info { flex: 1; }
+    .entry-item .entry-label { font-size: 13px; }
+    .entry-item .entry-meta {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+
+    .entry-item .key-badge {
+      font-size: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 5px;
+      color: var(--green);
+    }
+
+    .btn-delete {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 12px;
+      padding: 3px 8px;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .btn-delete:hover { border-color: var(--red); color: var(--red); }
+
+    /* Add entry form */
+    .form-fields { display: flex; flex-direction: column; gap: 10px; }
+
+    .form-row { display: flex; flex-direction: column; gap: 4px; }
+
+    .form-row label {
+      font-size: 11px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .form-row input, .form-row select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 8px 12px;
+      outline: none;
+      width: 100%;
+      transition: border-color 0.2s;
+    }
+    .form-row input:focus, .form-row select:focus { border-color: var(--accent); }
+    .form-row select option { background: var(--surface); }
+
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+    .btn-primary {
+      background: var(--accent);
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 7px 16px;
+      transition: background 0.2s;
+    }
+    .btn-primary:hover { background: var(--accent-dim); }
+
+    .btn-secondary {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 12px;
+      padding: 7px 16px;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .btn-secondary:hover { border-color: var(--text-dim); color: var(--text); }
+
+    .no-entries {
+      color: var(--text-dim);
+      font-size: 12px;
+      text-align: center;
+      padding: 12px 0;
+    }
   </style>
 </head>
 <body>
 
 <header>
   <h1>kaybee</h1>
-  <span class="model-badge" id="model-label">loading...</span>
+  <select id="entry-select" title="Active model"></select>
   <div class="verbosity-toggle">
     <button id="btn-concise" class="active" title="Answer only, no explanation">concise</button>
     <button id="btn-verbose" title="Answer with explanation">verbose</button>
   </div>
-  <span id="status-dot" title="Ollama status"></span>
+  <button id="settings-btn" title="Manage models">⚙</button>
+  <span id="status-dot" title="Backend status"></span>
 </header>
 
 <main id="chat">
@@ -278,62 +453,284 @@
   <p class="hint">Enter to send &nbsp;·&nbsp; Shift+Enter for newline</p>
 </footer>
 
+<!-- Settings modal -->
+<div class="modal-overlay hidden" id="settings-overlay">
+  <div class="modal">
+    <h2>⚙ Model Settings</h2>
+
+    <div class="modal-section">
+      <h3>Configured Models</h3>
+      <div class="entry-list" id="entry-list">
+        <p class="no-entries">Loading…</p>
+      </div>
+    </div>
+
+    <div class="modal-section">
+      <h3>Add Model</h3>
+      <div class="form-fields" id="add-form">
+        <div class="form-row">
+          <label>Label</label>
+          <input id="f-label" type="text" placeholder="My Claude Sonnet" />
+        </div>
+        <div class="form-row">
+          <label>Provider</label>
+          <select id="f-provider"></select>
+        </div>
+        <div id="f-dynamic-fields" class="form-fields"></div>
+      </div>
+      <div class="modal-actions" style="margin-top:4px">
+        <button class="btn-primary" id="btn-add-entry">Add Model</button>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" id="btn-close-settings">Close</button>
+    </div>
+  </div>
+</div>
+
 <script>
-  const API = '';  // same origin via nginx proxy
+  const API = '';
   const chat = document.getElementById('chat');
   const emptyState = document.getElementById('empty-state');
   const questionEl = document.getElementById('question');
   const sendBtn = document.getElementById('send-btn');
-  const modelLabel = document.getElementById('model-label');
   const statusDot = document.getElementById('status-dot');
   const btnConcise = document.getElementById('btn-concise');
   const btnVerbose = document.getElementById('btn-verbose');
+  const entrySelect = document.getElementById('entry-select');
+  const settingsBtn = document.getElementById('settings-btn');
+  const settingsOverlay = document.getElementById('settings-overlay');
+  const btnCloseSettings = document.getElementById('btn-close-settings');
+  const entryListEl = document.getElementById('entry-list');
+  const fProvider = document.getElementById('f-provider');
+  const fDynamic = document.getElementById('f-dynamic-fields');
+  const btnAddEntry = document.getElementById('btn-add-entry');
 
+  // ── State ──────────────────────────────────────────────────────────────────
   let verbosityMode = localStorage.getItem('verbosity') || 'concise';
+  let entries = [];
+  let providers = [];
 
+  // ── Verbosity ──────────────────────────────────────────────────────────────
   function setVerbosity(mode) {
     verbosityMode = mode;
     localStorage.setItem('verbosity', mode);
     btnConcise.classList.toggle('active', mode === 'concise');
     btnVerbose.classList.toggle('active', mode === 'verbose');
   }
-
   setVerbosity(verbosityMode);
   btnConcise.addEventListener('click', () => setVerbosity('concise'));
   btnVerbose.addEventListener('click', () => setVerbosity('verbose'));
 
-  // auto-resize textarea
+  // ── Textarea ───────────────────────────────────────────────────────────────
   questionEl.addEventListener('input', () => {
     questionEl.style.height = 'auto';
     questionEl.style.height = Math.min(questionEl.scrollHeight, 200) + 'px';
   });
-
   questionEl.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      submit();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
   });
-
   sendBtn.addEventListener('click', submit);
 
+  // ── Health check ───────────────────────────────────────────────────────────
   async function checkHealth() {
     try {
       const res = await fetch(`${API}/health`);
       if (!res.ok) throw new Error();
-      const data = await res.json();
       statusDot.className = 'online';
-      modelLabel.textContent = data.model;
-      statusDot.title = 'Ollama connected';
+      statusDot.title = 'Backend connected';
     } catch {
       statusDot.className = 'error';
-      modelLabel.textContent = 'offline';
       statusDot.title = 'Cannot reach backend';
     }
   }
-
   checkHealth();
 
+  // ── Entry selector ─────────────────────────────────────────────────────────
+  async function loadEntries() {
+    try {
+      const res = await fetch(`${API}/entries`);
+      entries = await res.json();
+    } catch {
+      entries = [];
+    }
+    renderEntrySelect();
+    renderEntryList();
+  }
+
+  function renderEntrySelect() {
+    const prev = entrySelect.value;
+    entrySelect.innerHTML = '';
+    if (entries.length === 0) {
+      const opt = document.createElement('option');
+      opt.textContent = 'no models configured';
+      opt.disabled = true;
+      entrySelect.appendChild(opt);
+      return;
+    }
+    for (const e of entries) {
+      const opt = document.createElement('option');
+      opt.value = e.id;
+      opt.textContent = e.label;
+      entrySelect.appendChild(opt);
+    }
+    // Restore previous selection if still present
+    if (prev && entries.find(e => e.id === prev)) {
+      entrySelect.value = prev;
+    }
+  }
+
+  function activeEntryId() {
+    return entrySelect.value || null;
+  }
+
+  // ── Settings modal ─────────────────────────────────────────────────────────
+  settingsBtn.addEventListener('click', openSettings);
+  btnCloseSettings.addEventListener('click', closeSettings);
+  settingsOverlay.addEventListener('click', (e) => {
+    if (e.target === settingsOverlay) closeSettings();
+  });
+
+  async function openSettings() {
+    settingsOverlay.classList.remove('hidden');
+    await Promise.all([loadEntries(), loadProviders()]);
+  }
+
+  function closeSettings() {
+    settingsOverlay.classList.add('hidden');
+    // Refresh the header dropdown after any changes
+    loadEntries();
+  }
+
+  async function loadProviders() {
+    try {
+      const res = await fetch(`${API}/providers`);
+      providers = await res.json();
+    } catch {
+      providers = [];
+    }
+    renderProviderSelect();
+  }
+
+  function renderProviderSelect() {
+    fProvider.innerHTML = '';
+    for (const p of providers) {
+      const opt = document.createElement('option');
+      opt.value = p.type;
+      opt.textContent = p.type;
+      fProvider.appendChild(opt);
+    }
+    renderDynamicFields();
+  }
+
+  fProvider.addEventListener('change', renderDynamicFields);
+
+  function renderDynamicFields() {
+    const selected = providers.find(p => p.type === fProvider.value);
+    fDynamic.innerHTML = '';
+    if (!selected) return;
+    for (const field of selected.required_fields) {
+      const row = document.createElement('div');
+      row.className = 'form-row';
+      const label = document.createElement('label');
+      label.textContent = field.replace(/_/g, ' ');
+      const input = document.createElement('input');
+      input.id = `f-field-${field}`;
+      input.name = field;
+      input.placeholder = field;
+      const sensitive = ['api_key', 'secret', 'token'].includes(field);
+      input.type = sensitive ? 'password' : 'text';
+      row.appendChild(label);
+      row.appendChild(input);
+      fDynamic.appendChild(row);
+    }
+  }
+
+  function renderEntryList() {
+    entryListEl.innerHTML = '';
+    if (entries.length === 0) {
+      entryListEl.innerHTML = '<p class="no-entries">No models configured yet.</p>';
+      return;
+    }
+    for (const e of entries) {
+      const item = document.createElement('div');
+      item.className = 'entry-item';
+      const info = document.createElement('div');
+      info.className = 'entry-info';
+      const labelEl = document.createElement('div');
+      labelEl.className = 'entry-label';
+      labelEl.textContent = e.label;
+      const meta = document.createElement('div');
+      meta.className = 'entry-meta';
+      const modelStr = e.config.model ? ` · ${e.config.model}` : '';
+      meta.textContent = `${e.provider_type}${modelStr}`;
+      if (e.has_key) {
+        const badge = document.createElement('span');
+        badge.className = 'key-badge';
+        badge.textContent = 'key set';
+        meta.appendChild(document.createTextNode(' '));
+        meta.appendChild(badge);
+      }
+      info.appendChild(labelEl);
+      info.appendChild(meta);
+
+      const del = document.createElement('button');
+      del.className = 'btn-delete';
+      del.textContent = 'remove';
+      del.addEventListener('click', () => deleteEntry(e.id));
+
+      item.appendChild(info);
+      item.appendChild(del);
+      entryListEl.appendChild(item);
+    }
+  }
+
+  async function deleteEntry(id) {
+    await fetch(`${API}/entries/${id}`, { method: 'DELETE' });
+    await loadEntries();
+  }
+
+  btnAddEntry.addEventListener('click', async () => {
+    const label = document.getElementById('f-label').value.trim();
+    const provider_type = fProvider.value;
+    if (!label) { alert('Please enter a label.'); return; }
+    if (!provider_type) { alert('Please select a provider.'); return; }
+
+    btnAddEntry.disabled = true;
+    btnAddEntry.textContent = 'Adding…';
+
+    try {
+      const selected = providers.find(p => p.type === provider_type);
+      const config = {};
+      for (const field of (selected?.required_fields ?? [])) {
+        const el = document.getElementById(`f-field-${field}`);
+        if (el) config[field] = el.value;
+      }
+
+      const res = await fetch(`${API}/entries`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label, provider_type, config }),
+      });
+
+      if (res.ok) {
+        document.getElementById('f-label').value = '';
+        fDynamic.querySelectorAll('input').forEach(el => el.value = '');
+        await loadEntries();
+      } else {
+        const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
+        alert(`Failed to add model: ${err.detail}`);
+      }
+    } catch (err) {
+      alert(`Error: ${err.message}`);
+    } finally {
+      btnAddEntry.disabled = false;
+      btnAddEntry.textContent = 'Add Model';
+    }
+  });
+
+  // ── Chat ───────────────────────────────────────────────────────────────────
   function appendMessage(role, text) {
     emptyState.style.display = 'none';
     const msg = document.createElement('div');
@@ -358,16 +755,19 @@
     chat.appendChild(msg);
     const body = msg.querySelector('.body');
     const cursor = body.querySelector('.cursor');
+    let raw = '';
     return {
       append(text) {
+        raw += text;
         cursor.remove();
-        // insert text node before re-appending cursor
         body.insertBefore(document.createTextNode(text), null);
         body.appendChild(cursor);
         chat.scrollTop = chat.scrollHeight;
       },
       done() {
         cursor.remove();
+        body.innerHTML = marked.parse(raw);
+        chat.scrollTop = chat.scrollHeight;
       }
     };
   }
@@ -375,6 +775,12 @@
   async function submit() {
     const question = questionEl.value.trim();
     if (!question) return;
+
+    const entry_id = activeEntryId();
+    if (!entry_id) {
+      alert('No model selected. Add one in settings (⚙).');
+      return;
+    }
 
     questionEl.value = '';
     questionEl.style.height = 'auto';
@@ -389,7 +795,7 @@
       const res = await fetch(`${API}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, mode: verbosityMode }),
+        body: JSON.stringify({ question, mode: verbosityMode, entry_id }),
       });
 
       if (!res.ok) {
@@ -408,7 +814,7 @@
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
-        buffer = lines.pop(); // keep incomplete line
+        buffer = lines.pop();
 
         for (const line of lines) {
           if (!line.trim()) continue;
@@ -419,16 +825,11 @@
               appendMessage('assistant', `Error: ${chunk.error}`);
               return;
             }
-            if (chunk.response) {
-              streaming.append(chunk.response);
-            }
-          } catch {
-            // malformed chunk, skip
-          }
+            if (chunk.response) streaming.append(chunk.response);
+          } catch { /* malformed chunk, skip */ }
         }
       }
 
-      // flush remaining buffer
       if (buffer.trim()) {
         try {
           const chunk = JSON.parse(buffer);
@@ -445,6 +846,9 @@
       questionEl.focus();
     }
   }
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+  loadEntries();
 </script>
 </body>
 </html>
